@@ -1,27 +1,33 @@
 import asyncio
+import threading
+from flask import Flask
 from core.signal_manager import run_signal_loop
 from telegram_bot.bot import start_telegram_bot
 
-async def main():
-    # تشغيل البوت والتحليل في نفس الوقت
-    print("✅ بدء تشغيل المهام...")
+app = Flask(__name__)
 
-    # تشغيل مهام في الخلفية
-    bot_task = asyncio.create_task(start_telegram_bot())
-    signal_task = asyncio.create_task(run_signal_loop())
+@app.route('/')
+def home():
+    return "✅ Bot and Signal Manager are running on Railway!"
 
-    # متابعة المهام والتعامل مع الأخطاء
-    tasks = [bot_task, signal_task]
-
+def run_async_tasks():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    tasks = [
+        loop.create_task(start_telegram_bot()),
+        loop.create_task(run_signal_loop())
+    ]
     try:
-        await asyncio.gather(*tasks)
+        loop.run_until_complete(asyncio.gather(*tasks))
     except Exception as e:
-        print(f"❌ خطأ في إحدى المهام: {e}")
+        print(f"❌ خطأ في المهام: {e}")
     finally:
-        for task in tasks:
-            if not task.cancelled():
-                task.cancel()
-        print("🛑 تم إيقاف جميع المهام")
+        loop.close()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # تشغيل المهام غير المتزامنة في Thread منفصل
+    threading.Thread(target=run_async_tasks, daemon=True).start()
+
+    # تشغيل Flask (لـ Railway)
+    app.run(host="0.0.0.0", port=5000)
+
